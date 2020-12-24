@@ -47,8 +47,9 @@ d<-mutate(d,diabetes=ifelse(ChronicIllnessDetails=="diabetes",1,0),
           activetb=ifelse(TBCaseType=="prevalent"|is.na(TBCaseType),0,1),
           activetbdate=ifelse(activetb==1,studytime,NA),
           mantoux_bin=ifelse(mantoux_result>=5,1,0),
-          sex=ifelse(sex=="male",0,1),
           qfngit_result=igrapos)
+d$sex<-as.factor(d$sex)
+d$sex<-factor(d$sex,levels=c("male","female"))
 d$contact<-as.factor(d$contact)
 d$BCGScar<-as.factor(d$BCGScar)
 d$prevtbdiag<-as.factor(d$prevtbdiag)
@@ -61,8 +62,9 @@ d$mantoux_bin<-factor(d$mantoux_bin,levels=c("0","1"),labels=c("negative","posit
 
 #estimate TB incidence. Include only baseline visit
 d2<-filter(d,VisitType=="D0")
-#exclude participants with prevalent TB
+#exclude participants with prevalent TB and one HIV+ participant
 d2<-filter(d2,TBCaseType=="incident"|is.na(TBCaseType))
+d2<-filter(d2,hivpos!=1)
 d2<-mutate(d2,followup=as.numeric(studytime-recruitmentdate))
 
 #exclude participants without followup
@@ -78,6 +80,9 @@ inc_qft<-mutate(inc_qft,ir=activetb/(followup/365)*100)
 
 library(gtsummary)
 library("survival")
+
+#quantitative 
+
 library("survminer")
 fit<-coxph(Surv(followup, activetb) ~ mantoux_bin, data = d2)
 tbl_regression(fit,exponentiate = T)
@@ -85,4 +90,36 @@ tbl_regression(fit,exponentiate = T)
 fit<-coxph(Surv(followup, activetb) ~ igrapos, data = d2)
 tbl_regression(fit,exponentiate = T)
 
-explore
+#explore different TST cut-off values
+
+d2<-mutate(d2,tst10=ifelse(mantoux_result>=10,1,0),
+           tst15=ifelse(mantoux_result>=15,1,0),
+           tst_stratify=ifelse(mantoux_result>=15&prevbcg=="yes",1,
+                               ifelse(mantoux_result>=5&prevbcg=="no",1,0)
+                               )
+           )
+fit<-coxph(Surv(followup, activetb) ~ tst10, data = d2)
+tbl_regression(fit,exponentiate = T)
+fit<-coxph(Surv(followup, activetb) ~ tst15, data = d2)
+tbl_regression(fit,exponentiate = T)
+fit<-coxph(Surv(followup, activetb) ~ tst_stratify, data = d2)
+tbl_regression(fit,exponentiate = T)
+
+#use quantitative value
+#normalize quantiative QFT and tst results
+library(BBmisc)
+d2<-mutate(d2,normqft=normalize(qfngit_tbag_nil))
+d2<-mutate(d2,normtst=normalize(mantoux_result))
+fit<-coxph(Surv(followup, activetb) ~ normtst, data = d2)
+tbl_regression(fit,exponentiate = T)
+
+library(rms)
+fit<-coxph(Surv(followup, activetb) ~ rcs(normtst), data = d2)
+tbl_regression(fit,exponentiate = T)
+fit<-coxph(Surv(followup, activetb) ~ rcs(normqft), data = d2)
+tbl_regression(fit,exponentiate = T)
+
+#sub-group by 
+
+  
+
