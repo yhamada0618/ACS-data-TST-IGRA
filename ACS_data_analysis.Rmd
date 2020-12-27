@@ -1,4 +1,13 @@
+---
+title: "ACS data anaysis"
+output: html_document
+---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,message=F,warning=F)
+```
+
+```{r load data,cache=T }
 d<-read.delim("../acs_clinical_DB.txt", header = T, sep = ",", dec = ".")
 
 #manipulate to match variable names and coding with Rishi's data dictionary
@@ -48,8 +57,6 @@ d<-mutate(d,diabetes=ifelse(ChronicIllnessDetails=="diabetes",1,0),
           activetbdate=ifelse(activetb==1,studytime,NA),
           mantoux_bin=ifelse(mantoux_result>=5,1,0),
           qfngit_result=igrapos)
-d$activetb<-as.factor(d$activetb)
-d$activetb<-factor(d$activetb, levels=c(0,1),labels=c("no","yes"))
 d$sex<-as.factor(d$sex)
 d$sex<-factor(d$sex,levels=c("male","female"))
 d$contact<-as.factor(d$contact)
@@ -60,6 +67,8 @@ d$igrapos<-as.factor(d$igrapos)
 d$igrapos<-factor(d$igrapos,levels=c("negative","positive"))
 d$mantoux_bin<-as.factor(d$mantoux_bin)
 d$mantoux_bin<-factor(d$mantoux_bin,levels=c("0","1"),labels=c("negative","positive"))
+d$activetb<-as.factor(d$activetb)
+d$activetb<-factor(d$activetb, levels=c(0,1),labels=c("no","yes"))
 
 
 #estimate TB incidence. Include only baseline visit
@@ -72,21 +81,52 @@ d2<-mutate(d2,followup=as.numeric(studytime-recruitmentdate))
 #exclude participants without followup
 d2<-filter(d2,followup>0)
 
-library(table1)
-table1(~activetb+mantoux_bin+mantoux_result+igrapos+qfngit_tbag_nil+contact+age+sex+prevtbdiag+prevbcg+bmi+MotherGrossMonthlyIncome +FatherGrossMonthlyIncome+GuardianGrossMonthlyIncome,data=d2)
+```
 
-#overall incidence rate per 100p-y
+Characteristics of participants 
+
+```{r table1}
+library(table1)
+table1(~activetb+mantoux_bin+mantoux_result+igrapos+qfngit_tbag_nil+contact+age+sex+prevtbdiag+prevbcg+bmi+MotherGrossMonthlyIncome +FatherGrossMonthlyIncome+GuardianGrossMonthlyIncome+followup,data=d2)
+
+```
+
+
+# Missing data
+
+```{r missing data}
+library(VIM)
+library(FactoMineR)
+library(missMDA)
+library(naniar)
+library(dplyr)
+d4<-select(d2,activetb,mantoux_bin,igrapos,contact,age,sex,prevtbdiag,prevbcg,bmi,MotherGrossMonthlyIncome,followup)
+gg_miss_var(d4)
+res<-summary(aggr(d4, sortVar=TRUE))$combinations
+```
+
+```{r incidence,results="hide"}
+library(dplyr)
 d2$activetb<-as.numeric(d2$activetb)
 d2$activetb<-d2$activetb-1
-sum(d2$activetb==1)/(sum(d2$followup)/365)*100
 inc<-d2 %>% select(followup,mantoux_bin,activetb,igrapos) %>% group_by(mantoux_bin,igrapos) %>% summarise_at(c("activetb","followup"),sum,na.rm=T)
 inc_tst<-inc %>% group_by(mantoux_bin) %>% summarise_at(c("activetb","followup"),sum, na.rm=T)
 inc_tst<-mutate(inc_tst,ir=activetb/(followup/365)*100)
 inc_qft<-inc %>% group_by(igrapos) %>% summarise_at(c("activetb","followup"),sum, na.rm=T)
 inc_qft<-mutate(inc_qft,ir=activetb/(followup/365)*100)
+```
+Overall incidence rate `r round(sum(d2$activetb==1)/(sum(d2$followup)/365)*100,2)` per 100p-y
+
+```{r incidence1}
+inc_tst
+inc_qft
+```
 
 
-
+# Survival analysis
+```{r cox}
+library(gtsummary)
+library("survival")
 #binary cox
 
 library("survminer")
@@ -111,8 +151,11 @@ tbl_regression(fit,exponentiate = T)
 fit<-coxph(Surv(followup, activetb) ~ tst_stratify, data = d2)
 tbl_regression(fit,exponentiate = T)
 
-#binary poisson
+```
 
+#IRR
+
+```{r IRR}
 fit<-glm(activetb ~ mantoux_bin+offset(log(followup)),family = poisson(link = "log"), data = d2)
 tbl_regression(fit,exponentiate = T)
 
@@ -126,10 +169,14 @@ tbl_regression(fit,exponentiate = T)
 fit<-glm(activetb ~ tst_stratify+offset(log(followup)),family = poisson(link = "log"), data = d2)
 tbl_regression(fit,exponentiate = T)
 
-#use quantitative value
+```
 
-#fit without normalization
 
+# quantitative value
+
+The prediction curve using quantitative QFT values shows an odd shape. 
+
+```{r quantitative}
 library(rms)
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(mantoux_result,3), data = d2)
 d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
@@ -140,21 +187,13 @@ ggplot(d2) +
 ggplot(d2) +
   geom_smooth(aes(x=mantoux_result, y=pred_tst)) 
 
-#normalize quantiative QFT and tst results
+```
+
+Curves using normalizatied figures also show strange shape
+
+```{r normalized}
 library(BBmisc)
-#d2<-mutate(d2,normqft=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(qfngit_tbag_nil,seq(0,1,0.01),na.rm=T))
-#                                               )
-#                        )
-#)
-#d2$normqft<-as.numeric(d2$normqft)
 
-
-#d2$normqft<-as.numeric(d2$normqft)
-#d2<-mutate(d2,normtst=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(mantoux_result,seq(0,1,0.01),na.rm=T))
-#                                                )
-#                      )
-#    )
-#d2$normtst<-as.numeric(d2$normtst)
 
 d2<-mutate(d2,normqft=normalize(qfngit_tbag_nil,method="range",range=c(0,1)))
 
@@ -162,8 +201,7 @@ d2<-mutate(d2,normtst=normalize(mantoux_result,method="range",range=c(0,1)))
 
 
 #prediction using normalized data
-
-if(FALSE){
+library(tidyr)
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,3), data = d2)
 d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
 fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,3), data = d2)
@@ -176,24 +214,28 @@ d3<-select(d3,norm_value,test,pred)
 library(ggplot2)
 ggplot(d3) +
 geom_smooth(aes(x=norm_value, y=pred,color=test)) 
-}
 
-#sub-group-by contact
+```
 
+# Stratified by contact
 
+```{r subgroup}
 fit<-glm(activetb ~ mantoux_bin*contact+offset(log(followup)),family = poisson(link = "log"), data = d2)
 tbl_regression(fit,exponentiate = T)
 
 fit<-glm(activetb ~ igrapos*contact+offset(log(followup)),family = poisson(link = "log"), data = d2)
 tbl_regression(fit,exponentiate = T)
+```
 
-#predictors
-library(MASS)
+# predictors
+
+```{r predictors}
+library(dplyr)
 d4<-select(d2,activetb,tst15,igrapos,contact,age,sex,prevtbdiag,prevbcg,bmi,followup)
-gg_miss_var(d4)
-res<-summary(aggr(d4, sortVar=TRUE))$combinations
 d4<-d4[complete.cases(d4),]
 full<- glm(activetb~tst15+igrapos+contact+age+sex+prevtbdiag+prevbcg+bmi+offset(log(followup)), d4,family = poisson(link="log"))
+library(MASS)
 step.model <- stepAIC(full, direction = "both", 
                       trace = FALSE)
 summary(step.model)
+```
