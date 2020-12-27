@@ -1,6 +1,8 @@
 ---
 title: "ACS data anaysis"
-output: rmarkdown::github_document
+output:
+  pdf_document: default
+  github_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -87,7 +89,7 @@ Characteristics of participants
 
 ```{r table1}
 library(table1)
-t<-table1(~activetb+mantoux_bin+mantoux_result+igrapos+qfngit_tbag_nil+contact+age+sex+prevtbdiag+prevbcg+bmi+MotherGrossMonthlyIncome +FatherGrossMonthlyIncome+GuardianGrossMonthlyIncome+followup,data=d2)
+table1(~activetb+mantoux_bin+mantoux_result+igrapos+qfngit_tbag_nil+contact+age+sex+prevtbdiag+prevbcg+bmi+MotherGrossMonthlyIncome +FatherGrossMonthlyIncome+GuardianGrossMonthlyIncome+followup,data=d2)
 
 ```
 
