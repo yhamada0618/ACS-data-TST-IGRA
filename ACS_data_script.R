@@ -81,7 +81,7 @@ inc_qft<-mutate(inc_qft,ir=activetb/(followup/365)*100)
 library(gtsummary)
 library("survival")
 
-#quantitative 
+#binary cox
 
 library("survminer")
 fit<-coxph(Surv(followup, activetb) ~ mantoux_bin, data = d2)
@@ -105,21 +105,87 @@ tbl_regression(fit,exponentiate = T)
 fit<-coxph(Surv(followup, activetb) ~ tst_stratify, data = d2)
 tbl_regression(fit,exponentiate = T)
 
+#binary poisson
+
+fit<-glm(activetb ~ mantoux_bin+offset(log(followup)),family = poisson(link = "log"), data = d2)
+tbl_regression(fit,exponentiate = T)
+
+fit<-glm(activetb ~ igrapos+offset(log(followup)),family = poisson(link = "log"), data = d2)
+tbl_regression(fit,exponentiate = T)
+
+fit<-glm(activetb ~ tst10+offset(log(followup)),family = poisson(link = "log"), data = d2)
+tbl_regression(fit,exponentiate = T)
+fit<-glm(activetb ~ tst15+offset(log(followup)),family = poisson(link = "log"), data = d2)
+tbl_regression(fit,exponentiate = T)
+fit<-glm(activetb ~ tst_stratify+offset(log(followup)),family = poisson(link = "log"), data = d2)
+tbl_regression(fit,exponentiate = T)
+
 #use quantitative value
 #normalize quantiative QFT and tst results
 library(BBmisc)
-d2<-mutate(d2,normqft=normalize(qfngit_tbag_nil))
-d2<-mutate(d2,normtst=normalize(mantoux_result))
-fit<-coxph(Surv(followup, activetb) ~ normtst, data = d2)
-tbl_regression(fit,exponentiate = T)
+#d2<-mutate(d2,normqft=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(qfngit_tbag_nil,seq(0,1,0.01),na.rm=T))
+  #                                               )
+ #                        )
+#)
+#d2$normqft<-as.numeric(d2$normqft)
+d2<-mutate(d2,normqft=normalize(qfngit_tbag_nil,method="range",range=c(0,1)))
+
+d2<-mutate(d2,normtst=normalize(mantoux_result,method="range",range=c(0,1)))
+
+
+#d2$normqft<-as.numeric(d2$normqft)
+#d2<-mutate(d2,normtst=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(mantoux_result,seq(0,1,0.01),na.rm=T))
+ #                                                )
+  #                      )
+   #    )
+#d2$normtst<-as.numeric(d2$normtst)
+
+#fit without normalization
 
 library(rms)
-fit<-coxph(Surv(followup, activetb) ~ rcs(normtst), data = d2)
+fit_tst<-coxph(Surv(followup, activetb) ~ rcs(mantoux_result,3), data = d2)
+d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
+fit_qft<-coxph(Surv(followup, activetb) ~ rcs(qfngit_tbag_nil,3), data = d2)
+d2$pred_qft[!is.na(d2$qfngit_tbag_nil)] <- predict(fit_qft, data = d2, type="risk")
+ggplot(d2) +
+  geom_smooth(aes(x=qfngit_tbag_nil, y=pred_qft)) 
+ggplot(d2) +
+  geom_smooth(aes(x=mantoux_result, y=pred_tst)) 
+
+
+#prediction using normalized data
+
+if(FALSE){
+fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,3), data = d2)
+d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
+fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,3), data = d2)
+d2$pred_qft[!is.na(d2$normqft)] <- predict(fit_qft, data = d2, type="risk")
+d3<-select(d2,pred_tst,pred_qft,normtst,normqft)
+d3<-gather(d3, test, norm_value, normtst:normqft)
+d3<-mutate(d3,test=ifelse(test=="normtst","TST","IGRA"))
+d3<-mutate(d3,pred=ifelse(test=="TST",pred_tst,pred_qft))
+d3<-select(d3,norm_value,test,pred)
+library(ggplot2)
+ggplot(d3) +
+geom_smooth(aes(x=norm_value, y=pred,color=test)) 
+}
+
+#sub-group-by contact
+
+
+fit<-glm(activetb ~ mantoux_bin*contact+offset(log(followup)),family = poisson(link = "log"), data = d2)
 tbl_regression(fit,exponentiate = T)
-fit<-coxph(Surv(followup, activetb) ~ rcs(normqft), data = d2)
+
+fit<-glm(activetb ~ igrapos*contact+offset(log(followup)),family = poisson(link = "log"), data = d2)
 tbl_regression(fit,exponentiate = T)
 
-#sub-group by 
-
-  
-
+#predictors
+d4<-select(d2,activetb,tst15,igrapos,contact,age,sex,prevtbdiag,prevbcg,bmi,followup)
+gg_miss_var(d4)
+res<-summary(aggr(d4, sortVar=TRUE))$combinations
+d4<-d4[complete.cases(d4),]
+library(glmnet)
+full<- glm(activetb~tst15+igrapos+contact+age+sex+prevtbdiag+prevbcg+bmi+offset(log(followup)), d4,family = poisson(link="log"))
+step.model <- stepAIC(full, direction = "both", 
+                      trace = FALSE)
+summary(step.model)
