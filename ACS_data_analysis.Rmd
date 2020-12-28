@@ -1,8 +1,8 @@
 ---
 title: "ACS data anaysis"
 output:
-  github_document: default
   html_document : default
+  github_document: default
 ---
 
 ```{r setup, include=FALSE}
