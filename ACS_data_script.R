@@ -191,9 +191,9 @@ d2$normqft<-as.numeric(as.character(d2$normqft))
 #prediction using normalized data
 
 
-fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,3), data = d2)
+fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,c(10,50,90)), data = d2)
 d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
-fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,3), data = d2)
+fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,c(10,50,90)), data = d2)
 d2$pred_qft[!is.na(d2$normqft)] <- predict(fit_qft, data = d2, type="risk")
 d3<-select(d2,pred_tst,pred_qft,normtst,normqft)
 d3<-gather(d3, test, norm_value, normtst:normqft)
@@ -204,7 +204,32 @@ library(ggplot2)
 ggplot(d3) +
 geom_smooth(aes(x=norm_value, y=pred,color=test)) 
 
+#Normalization following the PRESKOPE-TB percentile
+#prepare breaks and labels for cut()
+qft_cat<-c(0,0.001,0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1,0.12,0.13,0.15,0.17,0.2,0.22,0.26,0.3,0.35,0.4,0.45,0.52,0.6,0.69,0.81,0.92,1.07,1.27,1.52,1.77,2.06,2.48,2.94,3.55,4.28,5.1,6.29,7.59,9.18,10,+Inf)
+qft_label<-c(1,39,40,49,54,57,60,62,63,65,66,67,69:98)
+tst_cat<-c(0,2:23,25,27,31,+Inf)
+tst_label<-c(1,52,53,55,57,60,62,64,66,68,72,74,77,79,81,84,86,88,89,91,94:98,99)
 
+d2<-mutate(d2,normqft=cut(qfngit_tbag_nil,breaks=qft_cat,labels=qft_label,right=F))
+d2<-mutate(d2,normtst=cut(mantoux_result,breaks=tst_cat,labels=tst_label,right=F))
+d2$normtst<-as.numeric(as.character(d2$normtst))
+d2$normqft<-as.numeric(as.character(d2$normqft))
+
+
+
+fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,c(10,50,90)), data = d2)
+d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
+fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,c(10,50,90)), data = d2)
+d2$pred_qft[!is.na(d2$normqft)] <- predict(fit_qft, data = d2, type="risk")
+d3<-select(d2,pred_tst,pred_qft,normtst,normqft)
+d3<-gather(d3, test, norm_value, normtst:normqft)
+d3<-mutate(d3,test=ifelse(test=="normtst","TST","IGRA"))
+d3<-mutate(d3,pred=ifelse(test=="TST",pred_tst,pred_qft))
+d3<-select(d3,norm_value,test,pred)
+library(ggplot2)
+ggplot(d3) +
+  geom_smooth(aes(x=norm_value, y=pred,color=test)) 
 #sub-group-by contact
 
 
@@ -224,3 +249,4 @@ full<- glm(activetb~tst15+igrapos+contact+age+sex+prevtbdiag+prevbcg+bmi+offset(
 step.model <- stepAIC(full, direction = "both", 
                       trace = FALSE)
 summary(step.model)
+
