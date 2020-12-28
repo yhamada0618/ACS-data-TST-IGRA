@@ -88,7 +88,7 @@ inc_qft<-mutate(inc_qft,ir=activetb/(followup/365)*100)
 
 
 #binary cox
-
+library("survival")
 library("survminer")
 fit<-coxph(Surv(followup, activetb) ~ mantoux_bin, data = d2)
 tbl_regression(fit,exponentiate = T)
@@ -130,6 +130,9 @@ tbl_regression(fit,exponentiate = T)
 
 #fit without normalization
 
+#replace 0< with 0 for QFT results
+d2<-mutate(d2,qfngit_tbag_nil=ifelse(qfngit_tbag_nil<0,0,qfngit_tbag_nil))
+
 library(rms)
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(mantoux_result,3), data = d2)
 d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
@@ -142,28 +145,52 @@ ggplot(d2) +
 
 #normalize quantiative QFT and tst results
 library(BBmisc)
-#d2<-mutate(d2,normqft=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(qfngit_tbag_nil,seq(0,1,0.01),na.rm=T))
-#                                               )
-#                        )
-#)
-#d2$normqft<-as.numeric(d2$normqft)
+d2<-mutate(d2,mantoux_result=round(mantoux_result,0))
+qft<-quantile(d2$qfngit_tbag_nil,seq(0.01,1,0.01),na.rm=T)
+tst<-quantile(d2$mantoux_result,seq(0.01,1,0.01),na.rm=T)
+tile<-as.data.frame(cbind(qft,tst))
+tile$tst<-round(tile$tst)
+tile_tst<-data.frame(x=cumsum(table(tile$tst)),y=table(tile$tst))
+tile_tst<-mutate(tile_tst,p=ifelse(y.Freq>1,x-y.Freq+1,x))
+tile_tst$p[1]<-0
+tile<-mutate(tile,p_tile_tst=tile_tst$p[match(tst,tile_tst$y.Var1)])
+tile_qft<-data.frame(x=cumsum(table(tile$qft)),y=table(tile$qft))
+tile_qft<-mutate(tile_qft,p=ifelse(y.Freq>1,x-y.Freq+1,x))
+tile_qft$p[1]<-0
+tile_qft$y.Var1<-as.numeric(as.character(tile_qft$y.Var1))
+tile<-mutate(tile,p_tile_qft=tile_qft$p[match(round(qft,2),round(tile_qft$y.Var1,2))])
 
 
-#d2$normqft<-as.numeric(d2$normqft)
-#d2<-mutate(d2,normtst=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(mantoux_result,seq(0,1,0.01),na.rm=T))
-#                                                )
-#                      )
-#    )
-#d2$normtst<-as.numeric(d2$normtst)
+d2<-mutate(d2,normqft=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(qfngit_tbag_nil,seq(0,1,0.01),na.rm=T))
+                                             )
+                    )
+)
+tst<-distinct(tile,tst,p_tile_tst)
+qft<-distinct(tile,qft,p_tile_qft)
 
-d2<-mutate(d2,normqft=normalize(qfngit_tbag_nil,method="range",range=c(0,1)))
 
-d2<-mutate(d2,normtst=normalize(mantoux_result,method="range",range=c(0,1)))
+
+d2<-mutate(d2,normtst=cut(mantoux_result,breaks=c(-Inf,unique(round(quantile(mantoux_result,seq(0,1,0.01),na.rm=T),0)
+)
+)
+,labels=tst$p_tile_tst)
+)
+
+d2<-mutate(d2,normqft=cut(qfngit_tbag_nil,breaks=c(-Inf,unique(quantile(qfngit_tbag_nil,seq(0,1,0.01),na.rm=T))
+                                                )
+                      ,labels=qft$p_tile_qft)
+    )
+d2$normtst<-as.numeric(as.character(d2$normtst))
+d2$normqft<-as.numeric(as.character(d2$normqft))
+
+#d2<-mutate(d2,normqft=normalize(qfngit_tbag_nil,method="range",range=c(0,1)))
+
+#d2<-mutate(d2,normtst=normalize(mantoux_result,method="range",range=c(0,1)))
 
 
 #prediction using normalized data
 
-if(FALSE){
+
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,3), data = d2)
 d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
 fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,3), data = d2)
@@ -176,7 +203,7 @@ d3<-select(d3,norm_value,test,pred)
 library(ggplot2)
 ggplot(d3) +
 geom_smooth(aes(x=norm_value, y=pred,color=test)) 
-}
+
 
 #sub-group-by contact
 
