@@ -1,7 +1,6 @@
 ---
 title: "ACS data anaysis"
 output:
-  pdf_document: default
   github_document: default
 ---
 
