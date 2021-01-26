@@ -1,5 +1,7 @@
 
 d<-read.delim("../acs_clinical_DB.txt", header = T, sep = ",", dec = ".")
+library(gtsummary)
+library(naniar)
 
 #manipulate to match variable names and coding with Rishi's data dictionary
 
@@ -250,3 +252,10 @@ step.model <- stepAIC(full, direction = "both",
                       trace = FALSE)
 summary(step.model)
 
+#load CORTIS#
+c<-read.csv("../ADSL.csv",header = T,stringsAsFactors = F)
+hist(c$IGRAscore,50)
+
+#PREDICT-TB#
+p<-read.csv("../predict.csv",header=T,stringsAsFactors = F)
+hist(p$qfngit_tbag_nil)
