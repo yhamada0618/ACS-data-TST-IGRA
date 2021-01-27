@@ -81,7 +81,7 @@ table1(~activetb+mantoux_bin+mantoux_result+igrapos+qfngit_tbag_nil+contact+age+
 d2$activetb<-as.numeric(d2$activetb)
 d2$activetb<-d2$activetb-1
 sum(d2$activetb==1)/(sum(d2$followup)/365)*100
-inc<-d2 %>% select(followup,mantoux_bin,activetb,igrapos) %>% group_by(mantoux_bin,igrapos) %>% summarise_at(c("activetb","followup"),sum,na.rm=T)
+inc<-d2 %>% dplyr::select(followup,mantoux_bin,activetb,igrapos) %>% group_by(mantoux_bin,igrapos) %>% summarise_at(c("activetb","followup"),sum,na.rm=T)
 inc_tst<-inc %>% group_by(mantoux_bin) %>% summarise_at(c("activetb","followup"),sum, na.rm=T)
 inc_tst<-mutate(inc_tst,ir=activetb/(followup/365)*100)
 inc_qft<-inc %>% group_by(igrapos) %>% summarise_at(c("activetb","followup"),sum, na.rm=T)
@@ -135,11 +135,13 @@ tbl_regression(fit,exponentiate = T)
 #replace 0< with 0 for QFT results
 d2<-mutate(d2,qfngit_tbag_nil=ifelse(qfngit_tbag_nil<0,0,qfngit_tbag_nil))
 
+d2<-filter(d2,!is.na(qfngit_tbag_nil)&!is.na(mantoux_result))
+
 library(rms)
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(mantoux_result,3), data = d2)
-d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
+d2$pred_tst<- predict(fit_tst, data = d2, type="risk")
 fit_qft<-coxph(Surv(followup, activetb) ~ rcs(qfngit_tbag_nil,3), data = d2)
-d2$pred_qft[!is.na(d2$qfngit_tbag_nil)] <- predict(fit_qft, data = d2, type="risk")
+d2$pred_qft <- predict(fit_qft, data = d2, type="risk")
 ggplot(d2) +
   geom_smooth(aes(x=qfngit_tbag_nil, y=pred_qft)) 
 ggplot(d2) +
@@ -194,14 +196,14 @@ d2$normqft<-as.numeric(as.character(d2$normqft))
 
 
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,c(10,50,90)), data = d2)
-d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
+d2$pred_tst<- predict(fit_tst, data = d2, type="risk")
 fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,c(10,50,90)), data = d2)
-d2$pred_qft[!is.na(d2$normqft)] <- predict(fit_qft, data = d2, type="risk")
-d3<-select(d2,pred_tst,pred_qft,normtst,normqft)
+d2$pred_qft <- predict(fit_qft, data = d2, type="risk")
+d3<-dplyr::select(d2,pred_tst,pred_qft,normtst,normqft)
 d3<-gather(d3, test, norm_value, normtst:normqft)
 d3<-mutate(d3,test=ifelse(test=="normtst","TST","IGRA"))
 d3<-mutate(d3,pred=ifelse(test=="TST",pred_tst,pred_qft))
-d3<-select(d3,norm_value,test,pred)
+d3<-dplyr::select(d3,norm_value,test,pred)
 library(ggplot2)
 ggplot(d3) +
 geom_smooth(aes(x=norm_value, y=pred,color=test)) 
@@ -221,14 +223,14 @@ d2$normqft<-as.numeric(as.character(d2$normqft))
 
 
 fit_tst<-coxph(Surv(followup, activetb) ~ rcs(normtst,c(10,50,90)), data = d2)
-d2$pred_tst[!is.na(d2$mantoux_result)] <- predict(fit_tst, data = d2, type="risk")
+d2$pred_tst <- predict(fit_tst, data = d2, type="risk")
 fit_qft<-coxph(Surv(followup, activetb) ~ rcs(normqft,c(10,50,90)), data = d2)
-d2$pred_qft[!is.na(d2$normqft)] <- predict(fit_qft, data = d2, type="risk")
-d3<-select(d2,pred_tst,pred_qft,normtst,normqft)
+d2$pred_qft <- predict(fit_qft, data = d2, type="risk")
+d3<-dplyr::select(d2,pred_tst,pred_qft,normtst,normqft)
 d3<-gather(d3, test, norm_value, normtst:normqft)
 d3<-mutate(d3,test=ifelse(test=="normtst","TST","IGRA"))
 d3<-mutate(d3,pred=ifelse(test=="TST",pred_tst,pred_qft))
-d3<-select(d3,norm_value,test,pred)
+d3<-dplyr::select(d3,norm_value,test,pred)
 library(ggplot2)
 ggplot(d3) +
   geom_smooth(aes(x=norm_value, y=pred,color=test)) 
@@ -243,7 +245,7 @@ tbl_regression(fit,exponentiate = T)
 
 #predictors
 library(MASS)
-d4<-select(d2,activetb,tst15,igrapos,contact,age,sex,prevtbdiag,prevbcg,bmi,followup)
+d4<-dplyr::select(d2,activetb,tst15,igrapos,contact,age,sex,prevtbdiag,prevbcg,bmi,followup)
 gg_miss_var(d4)
 res<-summary(aggr(d4, sortVar=TRUE))$combinations
 d4<-d4[complete.cases(d4),]
@@ -255,7 +257,81 @@ summary(step.model)
 #load CORTIS#
 c<-read.csv("../ADSL.csv",header = T,stringsAsFactors = F)
 hist(c$IGRAscore,50)
+c<-filter(c,mitt_osts==1)
+c<-mutate(c,IGRAscore=ifelse(IGRAscore<0,0,IGRAscore))
+
+
+qft<-quantile(c$IGRAscore,seq(0.01,1,0.01),na.rm=T)
+cor<-quantile(c$risk11_score,seq(0.01,1,0.01),na.rm=T)
+tile<-as.data.frame(cbind(qft,cor))
+tile_cor<-data.frame(x=cumsum(table(tile$cor)),y=table(tile$cor))
+tile_cor<-mutate(tile_cor,p=ifelse(y.Freq>1,x-y.Freq+1,x))
+tile_cor$p[1]<-0
+tile<-mutate(tile,p_tile_cor=tile_cor$p[match(cor,tile_cor$y.Var1)])
+tile_qft<-data.frame(x=cumsum(table(tile$qft)),y=table(tile$qft))
+tile_qft<-mutate(tile_qft,p=ifelse(y.Freq>1,x-y.Freq+1,x))
+tile_qft$p[1]<-0
+tile_qft$y.Var1<-as.numeric(as.character(tile_qft$y.Var1))
+tile<-mutate(tile,p_tile_qft=tile_qft$p[match(round(qft,2),round(tile_qft$y.Var1,2))])
+
+c2<-c
+cor<-distinct(tile,cor,p_tile_cor)
+cor<-rbind(c(0.8658009,0),cor)
+cor[2,2]<-1
+qft<-distinct(tile,qft,p_tile_qft)
+
+
+
+c2<-mutate(c2,normcor=cut(risk11_score,breaks=c(unique(quantile(risk11_score,seq(0,1,0.01),na.rm=T)),0)
+
+,labels=cor$p_tile_cor)
+)
+
+c2<-mutate(c2,normqft=cut(IGRAscore,breaks=c(-Inf,unique(quantile(IGRAscore,seq(0,1,0.01),na.rm=T))
+)
+,labels=qft$p_tile_qft)
+)
+c2$normcor<-as.numeric(as.character(c2$normcor))
+c2$normqft<-as.numeric(as.character(c2$normqft))
+
+c2<-filter(c2,!is.na(c2$normqft)&!is.na(c2$normcor))
+
+
+fit_cor<-coxph(Surv(tevent_osts, endpoint_osts) ~ rcs(normcor,c(10,50,90)), data = c2)
+c2$pred_cor <- predict(fit_cor, data = c2, type="risk")
+fit_qft<-coxph(Surv(tevent_osts, endpoint_osts) ~ rcs(normqft,c(10,50,90)), data = c2)
+c2$pred_qft<- predict(fit_qft, data = c2, type="risk")
+c3<-dplyr::select(c2,pred_cor,pred_qft,normcor,normqft)
+c3<-gather(c3, test, norm_value, normcor:normqft)
+c3<-mutate(c3,test=ifelse(test=="normcor","COR","IGRA"))
+c3<-mutate(c3,pred=ifelse(test=="COR",pred_cor,pred_qft))
+c3<-dplyr::select(c3,norm_value,test,pred)
+ggplot(c3) +
+  geom_smooth(aes(x=norm_value, y=pred,color=test)) 
+
 
 #PREDICT-TB#
 p<-read.csv("../predict.csv",header=T,stringsAsFactors = F)
 hist(p$qfngit_tbag_nil)
+p<-filter(p,!is.na(qfngit_tbag_nil)&!is.na(mantoux_result))
+#normalize using PERISKOPE-TB percentile
+p2<-mutate(p,normqft=cut(qfngit_tbag_nil,breaks=qft_cat,labels=qft_label,right=F))
+p2<-mutate(p2,normtst=cut(mantoux_result,breaks=tst_cat,labels=tst_label,right=F))
+p2$normtst<-as.numeric(as.character(p2$normtst))
+p2$normqft<-as.numeric(as.character(p2$normqft))
+
+
+
+fit_tst<-coxph(Surv(studytime, activetb) ~ rcs(normtst,c(10,50,90)), data = p2)
+p2$pred_tst <- predict(fit_tst, data = p2, type="risk")
+fit_qft<-coxph(Surv(studytime, activetb) ~ rcs(normqft,c(10,50,90)), data = p2)
+p2$pred_qft<- predict(fit_qft, data = p2, type="risk")
+p3<-dplyr::select(p2,pred_tst,pred_qft,normtst,normqft)
+p3<-gather(p3, test, norm_value, normtst:normqft)
+p3<-mutate(p3,test=ifelse(test=="normtst","TST","IGRA"))
+p3<-mutate(p3,pred=ifelse(test=="TST",pred_tst,pred_qft))
+p3<-dplyr::select(p3,norm_value,test,pred)
+ggplot(p3) +
+  geom_smooth(aes(x=norm_value, y=pred,color=test)) 
+
+
